@@ -1,6 +1,8 @@
 // @flow
 
-import { Component } from 'react';
+import type { ElementRef } from 'react';
+
+import { createRef, Component } from 'react';
 import Button from 'app/components/Button';
 import styles from './Poll.css';
 import type { PollEntity, OptionEntity } from 'app/reducers/polls';
@@ -15,7 +17,6 @@ type Props = {
   poll: PollEntity,
   handleVote: (pollId: number, optionId: number) => Promise<*>,
   backgroundLight?: boolean,
-  truncate?: number,
   details?: boolean,
 };
 
@@ -24,7 +25,6 @@ type OptionEntityRatio = OptionEntity & {
 };
 
 type State = {
-  truncateOptions: boolean,
   shuffledOptions: Array<OptionEntityRatio>,
   expanded: boolean,
 };
@@ -34,20 +34,12 @@ class Poll extends Component<Props, State> {
     super(props);
     const options = this.optionsWithPerfectRatios(props.poll.options);
     const shuffledOptions = this.shuffle(options);
-    if (props.truncate && options.length > props.truncate) {
-      this.state = {
-        truncateOptions: true,
-        shuffledOptions: shuffledOptions,
-        expanded: false,
-      };
-    } else {
-      this.state = {
-        truncateOptions: false,
-        shuffledOptions: shuffledOptions,
-        expanded: true,
-      };
-    }
+    this.state = {
+      shuffledOptions: shuffledOptions,
+      expanded: false,
+    };
   }
+  optionsRef = createRef<ElementRef<Flex>>();
 
   toggleTruncate = () => {
     this.setState({
@@ -95,8 +87,8 @@ class Poll extends Component<Props, State> {
   };
 
   render() {
-    const { poll, handleVote, backgroundLight, details, truncate } = this.props;
-    const { truncateOptions, expanded, shuffledOptions } = this.state;
+    const { poll, handleVote, backgroundLight, details } = this.props;
+    const { expanded, shuffledOptions } = this.state;
     const {
       id,
       title,
@@ -107,119 +99,136 @@ class Poll extends Component<Props, State> {
     } = poll;
     const options = this.optionsWithPerfectRatios(this.props.poll.options);
     const orderedOptions = hasAnswered ? options : shuffledOptions;
-    const optionsToShow = expanded
-      ? orderedOptions
-      : orderedOptions.slice(0, truncate);
+    const optionsToShow = expanded ? orderedOptions : orderedOptions;
     return (
-      <div className={cx(styles.poll, backgroundLight ? styles.pollLight : '')}>
-        <Flex>
-          <Link to={`/polls/${id}`} style={{ flex: 1 }}>
-            <Icon name="stats" />
-            <span className={styles.pollHeader}>{title}</span>
+      <Flex alignItems="center" column className={styles.poll}>
+        <Flex justifyContent="center" className={styles.topBar}>
+          {hasAnswered ? (
+            <Icon name="stats" className={styles.stats} />
+          ) : (
+            <div className={styles.notAnswered}>?</div>
+          )}
+          <Link to={`/polls/${id}`}>
+            <Flex
+              justifyContent="center"
+              alignItems="center"
+              className={styles.headerBar}
+            >
+              {title}
+            </Flex>
           </Link>
-          <Tooltip content="Avstemningen er anonym." renderDirection="left">
-            <Icon
-              name="information-circle-outline"
-              size={20}
-              style={{ cursor: 'pointer' }}
-            />
-          </Tooltip>
         </Flex>
-        {details && (
-          <div>
-            <p>{description}</p>
-          </div>
-        )}
-        {hasAnswered && resultsHidden && <p>Resultatet er skjult</p>}
-        {hasAnswered && !resultsHidden && (
-          <Flex column className={styles.optionWrapper}>
-            <table className={styles.pollTable}>
-              <tbody>
-                {optionsToShow.map(({ id, name, votes, ratio }) => {
-                  return (
-                    <tr key={id}>
-                      <td className={styles.textColumn}>{name}</td>
-                      <td className={styles.graphColumn}>
-                        {votes === 0 ? (
-                          <span className={styles.noVotes}>Ingen stemmer</span>
-                        ) : (
-                          <div className={styles.fullGraph}>
-                            <div
-                              style={{
-                                width: `${ratio}%`,
-                              }}
-                            >
-                              <div className={styles.pollGraph}>
-                                {ratio >= 18 && <span>{`${ratio}%`}</span>}
-                              </div>
-                            </div>
-                            {ratio < 18 && (
-                              <span style={{ marginLeft: '2px' }}>
-                                {`${ratio}%`}
-                              </span>
-                            )}
-                          </div>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </Flex>
-        )}
-        {!hasAnswered && (
-          <Flex column className={styles.optionWrapper}>
-            {!expanded && (
+        <Flex
+          column
+          alignItems="center"
+          className={styles.voteButtonWrapper}
+          style={{
+            height:
+              expanded && this.optionsRef.current
+                ? `${this.optionsRef.current.clientHeight}px`
+                : '0px',
+          }}
+        >
+          <div className={styles.voteButtonSubWrapper} ref={this.optionsRef}>
+            {!hasAnswered && (
               <Flex
-                className={styles.blurContainer}
-                onClick={this.toggleTruncate}
+                column
+                alignItems="center"
+                className={styles.optionsWrapper}
               >
-                <p className={styles.blurOverlay}>
-                  Klikk her for å se alle alternativene.
-                </p>
-                <Icon
-                  className={cx(styles.blurOverlay, styles.blurArrow)}
-                  size={60}
-                  name={expanded ? 'arrow-up' : 'arrow-down'}
-                />
+                {details && description}
+                {options &&
+                  optionsToShow.map((option) => (
+                    <Button
+                      key={option.id}
+                      className={styles.voteButton}
+                      onClick={() => handleVote(poll.id, option.id)}
+                    >
+                      {option.name}
+                    </Button>
+                  ))}
               </Flex>
             )}
-            {options &&
-              optionsToShow.map((option) => (
-                <Flex
-                  className={cx(
-                    styles.alignItems,
-                    expanded ? '' : styles.blurEffect
-                  )}
-                  key={option.id}
-                >
-                  <Button
-                    className={styles.voteButton}
-                    onClick={() => handleVote(poll.id, option.id)}
-                  >
-                    {option.name}
-                  </Button>
-                </Flex>
-              ))}
-          </Flex>
-        )}
-        <div style={{ height: '29px' }}>
-          <div className={styles.moreOptionsLink}>
-            <span>{`Stemmer: ${totalVotes}`}</span>
-            {truncateOptions && (
-              <div className={styles.alignItems}>
-                <Icon
-                  onClick={this.toggleTruncate}
-                  className={styles.arrow}
-                  size={20}
-                  name={expanded ? 'arrow-up' : 'arrow-down'}
-                />
-              </div>
+            {hasAnswered && resultsHidden && (
+              <Flex
+                column
+                alignItems="center"
+                className={styles.optionsWrapper}
+              >
+                Resultatet er skjult
+              </Flex>
             )}
+            {hasAnswered && !resultsHidden && (
+              <Flex
+                column
+                alignItems="center"
+                className={styles.optionsWrapper}
+              >
+                <table className={styles.pollTable}>
+                  <tbody>
+                    {optionsToShow.map(({ id, name, votes, ratio }) => {
+                      return (
+                        <tr key={id}>
+                          <td className={styles.textColumn}>{name}</td>
+                          <td className={styles.graphColumn}>
+                            {votes === 0 ? (
+                              <span className={styles.noVotes}>
+                                Ingen stemmer
+                              </span>
+                            ) : (
+                              <div className={styles.fullGraph}>
+                                <div
+                                  style={{
+                                    width: `${ratio}%`,
+                                  }}
+                                >
+                                  <div className={styles.pollGraph}>
+                                    {ratio >= 18 && <span>{`${ratio}%`}</span>}
+                                  </div>
+                                </div>
+                                {ratio < 18 && (
+                                  <span style={{ marginLeft: '2px' }}>
+                                    {`${ratio}%`}
+                                  </span>
+                                )}
+                              </div>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </Flex>
+            )}
+            <div className={styles.totalVotes}>
+              <Tooltip
+                content="Avstemningen er anonym."
+                renderDirection="right"
+              >
+                <Icon
+                  name="information-circle-outline"
+                  size={17}
+                  style={{ cursor: 'pointer', margin: '0 5px' }}
+                />
+              </Tooltip>
+              Stemmer: {totalVotes}
+            </div>
           </div>
-        </div>
-      </div>
+        </Flex>
+        <Flex
+          alignItems="flex-end"
+          justifyContent="center"
+          className={styles.bottomBar}
+        >
+          <Icon
+            onClick={this.toggleTruncate}
+            className={expanded ? styles.arrowUp : styles.arrowDown}
+            size={20}
+            name={expanded ? 'arrow-up' : 'arrow-down'}
+          />
+        </Flex>
+      </Flex>
     );
   }
 }

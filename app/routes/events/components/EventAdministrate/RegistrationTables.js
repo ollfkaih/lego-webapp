@@ -22,7 +22,12 @@ import {
   PresenceIcons,
   Unregister,
 } from './AttendeeElements';
-import { getEventSemesterFromStartTime } from '../../utils';
+import {
+  getEventSemesterFromStartTime,
+  hasRegisteredConsent,
+  getConsent,
+  PHOTO_CONSENT_DOMAINS,
+} from '../../utils';
 
 type Props = {
   registered: Array<EventRegistration>,
@@ -86,42 +91,36 @@ const getRegistrationInfo = (pool, registration) => {
   return registrationInfo;
 };
 
-const getConsentIcons = (
-  LEGACY_photoConsent,
-  isConsentingWeb,
-  isConsentingSoMe
-) => {
-  if (
-    typeof isConsentingWeb === 'boolean' &&
-    typeof isConsentingSoMe === 'boolean'
-  ) {
+const getConsentIcons = (LEGACY_photoConsent, photoConsents, eventSemester) => {
+  if (hasRegisteredConsent(photoConsents, eventSemester)) {
+    const { WEBSITE, SOCIAL_MEDIA } = PHOTO_CONSENT_DOMAINS;
+
+    const consentMessage = (photoConsent) =>
+      `Brukeren godkjenner ${
+        photoConsent?.isConsenting ? ' ' : 'IKKE '
+      } at bilder publiseres på ${
+        photoConsent?.domain === WEBSITE ? 'abakus.no' : 'sosiale medier'
+      }`;
+
+    const iconClass = (photoConsent) =>
+      cx(
+        photoConsent?.isConsenting ? styles.greenIcon : styles.crossIcon,
+        photoConsent?.domain === WEBSITE
+          ? 'fa fa-circle'
+          : 'fa fa-facebook-square'
+      );
+
+    const webConsent = getConsent(WEBSITE, eventSemester, photoConsents);
+    const soMeConsent = getConsent(SOCIAL_MEDIA, eventSemester, photoConsents);
     return (
       <>
         <TooltipIcon
-          content={
-            (isConsentingWeb === true
-              ? 'Brukeren godkjenner '
-              : 'Brukeren godkjenner IKKE ') +
-            'at bilder publiseres på Abakus.no'
-          }
-          iconClass={
-            isConsentingWeb === true
-              ? cx('fa fa-circle', styles.greenIcon)
-              : cx('fa fa-circle', styles.crossIcon)
-          }
+          content={consentMessage(webConsent)}
+          iconClass={iconClass(webConsent)}
         />
         <TooltipIcon
-          content={
-            (isConsentingSoMe === true
-              ? 'Brukeren godkjenner '
-              : 'Brukeren godkjenner IKKE ') +
-            'at bilder publiseres på sosiale medier'
-          }
-          iconClass={
-            isConsentingSoMe === true
-              ? cx('fa fa-facebook-square', styles.greenIcon)
-              : cx('fa fa-facebook-square', styles.crossIcon)
-          }
+          content={consentMessage(soMeConsent)}
+          iconClass={iconClass(soMeConsent)}
         />
       </>
     );
@@ -221,26 +220,14 @@ export class RegisteredTable extends Component<Props> {
         render: (feedback, registration) => {
           const eventSemester = getEventSemesterFromStartTime(event.startTime);
           const photoConsents = registration.user.photoConsents;
-
           const LEGACY_photoConsent = registration.LEGACYPhotoConsent;
-
-          const isConsentingWeb = photoConsents.find(
-            (consent) =>
-              consent.domain === 'WEBSITE' && consent.semester === eventSemester
-          )?.isConsenting;
-
-          const isConsentingSoMe = photoConsents.find(
-            (consent) =>
-              consent.domain === 'SOCIAL_MEDIA' &&
-              consent.semester === eventSemester
-          )?.isConsenting;
 
           return (
             <div className={styles.consents}>
               {getConsentIcons(
                 LEGACY_photoConsent,
-                isConsentingWeb,
-                isConsentingSoMe
+                photoConsents,
+                eventSemester
               )}
             </div>
           );

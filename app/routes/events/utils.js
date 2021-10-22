@@ -2,7 +2,12 @@
 import { pick, sumBy } from 'lodash';
 import moment from 'moment-timezone';
 import type { TransformEvent, Event, EventType, AddPenalty } from 'app/models';
-import type { PhotoConsent } from 'app/models';
+import type { PhotoConsent, PhotoConsentDomain } from 'app/models';
+
+export const PHOTO_CONSENT_DOMAINS = {
+  WEBSITE: 'WEBSITE',
+  SOCIAL_MEDIA: 'SOCIAL_MEDIA',
+};
 
 // Current eventTypes
 export const EVENT_CONSTANTS: { [EventType]: string } = {
@@ -230,6 +235,13 @@ export const getEventSemesterFromStartTime = (startTime: moment): string => {
   return (eventMonth > 7 ? 'H' : 'V') + eventYear;
 };
 
+export const getConsent = (
+  domain: PhotoConsentDomain,
+  semester: string,
+  photoConsents: Array<PhotoConsent>
+): ?PhotoConsent =>
+  photoConsents.find((pc) => pc.domain === domain && pc.semester === semester);
+
 export const hasRegisteredConsent = (
   photoConsents: Array<PhotoConsent>,
   eventSemester: string
@@ -238,5 +250,6 @@ export const hasRegisteredConsent = (
     (pc) =>
       pc.semester === eventSemester && typeof pc.isConsenting === 'boolean'
   );
+
   return registeredConsents.length === 2;
 };

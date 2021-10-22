@@ -1,16 +1,108 @@
 // @flow
 
-import React, { Component } from 'react';
+import { useState } from 'react';
 import Select from 'react-select';
 import Button from 'app/components/Button';
 import Flex from 'app/components/Layout/Flex';
 import { ConfirmModalWithParent } from 'app/components/Modal/ConfirmModal';
-import type { PhotoConsent, PhotoConsentDomain } from 'app/models';
+import type { PhotoConsent } from 'app/models';
 import moment from 'moment-timezone';
-
+import { PHOTO_CONSENT_DOMAINS, getConsent } from '../../events/utils';
 import styles from './PhotoConsent.css';
 
-type Props = {
+const getYear = (semesterStr: string): number =>
+  parseInt(semesterStr.substr(1, 2));
+
+const getSemester = (semesterStr: string): string => semesterStr.charAt(0);
+
+const ConsentManager = ({
+  consent,
+  updateConsent,
+  isMe,
+}: {
+  consent: ?PhotoConsent,
+  updateConsent: (consent: PhotoConsent) => Promise<*>,
+  isMe: boolean,
+}) => {
+  if (!consent) {
+    return null;
+  }
+  const convertToReadableSemester = (semesterYear: string): string =>
+    (getSemester(semesterYear) === 'H' ? 'høsten 20' : 'våren 20') +
+    getYear(semesterYear);
+
+  const getConsentStatus = () => {
+    if (consent?.isConsenting) {
+      return (
+        <>
+          <b>Du ga samtykket den </b>
+          <i>{moment(consent?.updatedAt).format('DD. MMM YYYY')}.</i>
+        </>
+      );
+    } else if (consent?.isConsenting === false) {
+      return (
+        <>
+          <b>Du trakk samtykket den </b>
+          <i>{moment(consent?.updatedAt).format('DD. MMM YYYY')}.</i>
+        </>
+      );
+    }
+    return <b>Du har ikke tatt stilling til samtykket.</b>;
+  };
+
+  const presentableDomain =
+    consent.domain === PHOTO_CONSENT_DOMAINS.WEBSITE
+      ? 'abakus.no'
+      : 'sosiale medier';
+  return (
+    <>
+      <h4 className={styles.categoryTitle}>{presentableDomain}</h4>
+      <h5>
+        Jeg godtar at Abakus kan legge ut bilder av meg på {presentableDomain} i
+        perioden {convertToReadableSemester(consent.semester)}:
+      </h5>
+      <div className={styles.statusContainer}>{getConsentStatus()}</div>
+      <div>
+        <ConfirmModalWithParent
+          closeOnConfirm={true}
+          title={`Trekke bildesamtykke på ${presentableDomain}`}
+          message={`Er du sikker på at du vil trekke bildesamtykket ditt for ${convertToReadableSemester(
+            consent.semester
+          )} på ${presentableDomain}? Dersom du ønsker å fjerne noen spesifikke bilder, kan du i stedet sende en mail til pr@abakus.no med informasjon om hvilke bilder du vil fjerne.`}
+          onConfirm={() => updateConsent({ ...consent, isConsenting: false })}
+        >
+          <Button
+            className={styles.notConsentBtn}
+            disabled={consent?.isConsenting === false || !isMe}
+          >
+            {consent?.isConsenting === null
+              ? 'Nei'
+              : !consent?.isConsenting
+              ? 'Du har trukket samtykket'
+              : 'Trekk samtykket'}
+          </Button>
+        </ConfirmModalWithParent>
+        {consent?.isConsenting === null && (
+          <Button
+            disabled={!isMe}
+            onClick={() => updateConsent({ ...consent, isConsenting: true })}
+            className={styles.consentBtn}
+          >
+            Ja
+          </Button>
+        )}
+      </div>
+    </>
+  );
+};
+
+const PhotoConsents = ({
+  photoConsents,
+  username,
+  updatePhotoConsent,
+  userId,
+  isMe,
+}: {
   photoConsents: Array<PhotoConsent>,
   username: string,
   updatePhotoConsent: (
@@ -20,265 +112,57 @@ type Props = {
   ) => Promise<*>,
   userId: Number,
   isMe: boolean,
+}) => {
+  const semesters = [
+    ...new Set(photoConsents.map((c) => c.semester)),
+  ].sort((a, b) =>
+    getYear(b) === getYear(a)
+      ? parseInt(getSemester(b)) - parseInt(getSemester(a))
+      : getYear(b) - getYear(a)
+  );
+  const [selectedSemester, setSelectedSemester] = useState(semesters[0]);
+
+  const updateConsent = (consent: PhotoConsent) =>
+    updatePhotoConsent(consent, username, userId);
+
+  return (
+    <Flex column={true}>
+      <label htmlFor="select-semester">
+        <h3>Semester</h3>
+      </label>
+      <Select
+        name="select-semester"
+        clearable={false}
+        options={semesters.map((semester) => ({
+          value: semester,
+          label: semester,
+        }))}
+        value={{
+          value: selectedSemester,
+          label: selectedSemester,
+        }}
+        onChange={({ value }) => setSelectedSemester(value)}
+      />
+      <ConsentManager
+        consent={getConsent(
+          PHOTO_CONSENT_DOMAINS.SOCIAL_MEDIA,
+          selectedSemester,
+          photoConsents
+        )}
+        updateConsent={updateConsent}
+        isMe={isMe}
+      />
+      <ConsentManager
+        consent={getConsent(
+          PHOTO_CONSENT_DOMAINS.WEBSITE,
+          selectedSemester,
+          photoConsents
+        )}
+        updateConsent={updateConsent}
+        isMe={isMe}
+      />
+    </Flex>
+  );
 };
-
-type Option = {
-  value: string,
-  label: string,
-};
-
-type State = {
-  selectedOption: ?Option,
-};
-
-class PhotoConsents extends Component<Props, State> {
-  constructor() {
-    super();
-    this.state = {
-      selectedOption: null,
-    };
-  }
-
-  handleChange = (selectedOption: Option): void => {
-    this.setState({ selectedOption });
-  };
-
-  render() {
-    const {
-      photoConsents,
-      username,
-      updatePhotoConsent,
-      userId,
-      isMe,
-    } = this.props;
-    const { selectedOption } = this.state;
-
-    const getYear = (semesterStr: string): number =>
-      parseInt(semesterStr.substr(1, 2));
-
-    const getSemester = (semesterStr: string): string => semesterStr.charAt(0);
-
-    const convertToReadableSemester = (semesterYear: string): string => {
-      let result = '';
-      if (getSemester(semesterYear) === 'H') {
-        result = result + 'høsten 20';
-      } else {
-        result = result + 'våren 20';
-      }
-
-      result = result + getYear(semesterYear);
-      return result;
-    };
-
-    const getSemesterList = (): Array<string> =>
-      [...new Set(photoConsents.map((c) => c.semester))].sort((a, b) =>
-        getYear(b) === getYear(a)
-          ? parseInt(getSemester(b)) - parseInt(getSemester(a))
-          : getYear(b) - getYear(a)
-      );
-
-    const createInitialOption = (): Option => {
-      const mostRecentSemester = getSemesterList()[0];
-      const initialOption = {
-        value: mostRecentSemester,
-        label: mostRecentSemester,
-      };
-      this.setState({
-        selectedOption: initialOption,
-      });
-      return initialOption;
-    };
-
-    const createOptions = (): Array<Option> =>
-      getSemesterList().map((semester) => ({
-        value: semester,
-        label: semester,
-      }));
-
-    const getSelectedSemester = (): string =>
-      (selectedOption && selectedOption.value) || '';
-
-    const getSelectedConsent = (domain: PhotoConsentDomain): ?PhotoConsent =>
-      photoConsents.find(
-        (pc: PhotoConsent): boolean =>
-          pc.semester === getSelectedSemester() && pc.domain === domain
-      );
-
-    const isConsenting = (domain: PhotoConsentDomain): ?boolean => {
-      return getSelectedConsent(domain)?.isConsenting === true;
-    };
-
-    const isNotConsenting = (domain: PhotoConsentDomain): ?boolean => {
-      return getSelectedConsent(domain)?.isConsenting === false;
-    };
-
-    const hasNotSelectedConsent = (domain: PhotoConsentDomain): boolean => {
-      return getSelectedConsent(domain)?.isConsenting === null;
-    };
-
-    const getConsentStatus = (domain: PhotoConsentDomain) => {
-      const consent = getSelectedConsent(domain);
-      if (isConsenting(domain)) {
-        return (
-          <>
-            <b>Du ga samtykket den </b>
-            <i>{moment(consent?.updatedAt).format('DD. MMM YYYY')}.</i>
-          </>
-        );
-      } else if (consent?.isConsenting === false) {
-        return (
-          <>
-            <b>Du trakk samtykket den </b>
-            <i>{moment(consent?.updatedAt).format('DD. MMM YYYY')}.</i>
-          </>
-        );
-      }
-      return <b>Du har ikke tatt stilling til samtykket.</b>;
-    };
-
-    return (
-      <Flex column={true}>
-        <label htmlFor="select-semester">
-          <h3>Semester</h3>
-        </label>
-        <Select
-          name="select-semester"
-          clearable={false}
-          options={createOptions()}
-          value={selectedOption || createInitialOption()}
-          onChange={this.handleChange}
-        />
-        <h4 className={styles.categoryTitle}>Sosiale medier</h4>
-        <h5>
-          Jeg godtar at Abakus kan legge ut bilder av meg på sosiale medier i
-          perioden {convertToReadableSemester(getSelectedSemester())}:
-        </h5>
-        <div className={styles.statusContainer}>
-          {getConsentStatus('SOCIAL_MEDIA')}
-        </div>
-        <div>
-          <ConfirmModalWithParent
-            closeOnConfirm={true}
-            title="Trekke bildesamtykke på sosiale medier"
-            message={
-              'Er du sikker p\xe5 at du vil trekke bildesamtykket ditt for ' +
-              convertToReadableSemester(getSelectedSemester()) +
-              ' p\xe5 sosiale medier? Dette inneb\xe6rer at noen m\xe5 manuelt g\xe5 gjennom alle bildene fra arrangementene du har deltatt p\xe5 i perioden ' +
-              convertToReadableSemester(getSelectedSemester()) +
-              ', og fjerne dem. Dersom du \xf8nsker \xe5 fjerne noen spesifike bilder, kan du g\xe5 inn p\xe5 galleriet og trykke p\xe5 "Rapporter"-knappen p\xe5 de aktuelle bildene.'
-            }
-            onConfirm={() =>
-              updatePhotoConsent(
-                {
-                  semester: getSelectedSemester(),
-                  domain: 'SOCIAL_MEDIA',
-                  isConsenting: false,
-                  updatedAt: undefined,
-                },
-                username,
-                userId
-              )
-            }
-          >
-            <Button
-              className={styles.notConsentBtn}
-              disabled={isNotConsenting('SOCIAL_MEDIA') || !isMe}
-            >
-              {hasNotSelectedConsent('SOCIAL_MEDIA')
-                ? 'Nei'
-                : isNotConsenting('SOCIAL_MEDIA')
-                ? 'Du har trukket samtykket'
-                : 'Trekk samtykket'}
-            </Button>
-          </ConfirmModalWithParent>
-          {hasNotSelectedConsent('SOCIAL_MEDIA') && (
-            <Button
-              disabled={!isMe}
-              onClick={() =>
-                updatePhotoConsent(
-                  {
-                    semester: getSelectedSemester(),
-                    domain: 'SOCIAL_MEDIA',
-                    isConsenting: true,
-                    updatedAt: undefined,
-                  },
-                  username,
-                  userId
-                )
-              }
-              className={styles.consentBtn}
-            >
-              Ja
-            </Button>
-          )}
-        </div>
-        <h4 className={styles.categoryTitle}>Abakus.no</h4>
-        <h5>
-          Jeg godtar at Abakus kan legge ut bilder av meg på Abakus.no i
-          perioden {convertToReadableSemester(getSelectedSemester())}:
-        </h5>
-        <div className={styles.statusContainer}>
-          {getConsentStatus('WEBSITE')}
-        </div>
-        <div>
-          <ConfirmModalWithParent
-            closeOnConfirm={true}
-            title="Trekke bildesamtykke på Abakus.no"
-            message={
-              'Er du sikker p\xe5 at du vil trekke bildesamtykket ditt for ' +
-              convertToReadableSemester(getSelectedSemester()) +
-              ' p\xe5 Abakus.no? Dette inneb\xe6rer at noen m\xe5 manuelt g\xe5 gjennom alle bildene fra arrangementene du har deltatt p\xe5 i perioden ' +
-              convertToReadableSemester(getSelectedSemester()) +
-              ', og fjerne dem. Dersom du \xf8nsker \xe5 fjerne noen spesifike bilder, kan du g\xe5 inn p\xe5 galleriet og trykke p\xe5 "Rapporter"-knappen p\xe5 de aktuelle bildene.'
-            }
-            onConfirm={() =>
-              updatePhotoConsent(
-                {
-                  semester: getSelectedSemester(),
-                  domain: 'WEBSITE',
-                  isConsenting: false,
-                  updatedAt: undefined,
-                },
-                username,
-                userId
-              )
-            }
-          >
-            <Button
-              className={styles.notConsentBtn}
-              disabled={isNotConsenting('WEBSITE') || !isMe}
-            >
-              {hasNotSelectedConsent('WEBSITE')
-                ? 'Nei'
-                : isNotConsenting('WEBSITE')
-                ? 'Du har trukket samtykket'
-                : 'Trekk samtykket'}
-            </Button>
-          </ConfirmModalWithParent>
-          {hasNotSelectedConsent('WEBSITE') && (
-            <Button
-              disabled={!isMe}
-              onClick={() =>
-                updatePhotoConsent(
-                  {
-                    semester: getSelectedSemester(),
-                    domain: 'WEBSITE',
-                    isConsenting: true,
-                    updatedAt: undefined,
-                  },
-                  username,
-                  userId
-                )
-              }
-              className={styles.consentBtn}
-            >
-              Ja
-            </Button>
-          )}
-        </div>
-      </Flex>
-    );
-  }
-}
 
 export default PhotoConsents;

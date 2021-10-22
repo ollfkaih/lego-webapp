@@ -34,6 +34,8 @@ export type Grade = {
 
 export type PhotoConsentDomain = 'WEBSITE' | 'SOCIAL_MEDIA';
 
+export type Semester = 'spring' | 'autumn';
+
 export type PhotoConsent = {
   semester: string,
   domain: PhotoConsentDomain,
@@ -232,8 +234,6 @@ export type Joblisting = {
   toYear: number,
   workplaces: Array<Workplace>,
 };
-
-export type Semester = 'spring' | 'autumn';
 
 export type CompanySemesterContactedStatus =
   | 'company_presentation'

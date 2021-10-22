@@ -12,6 +12,9 @@ import {
   paymentSuccess,
   paymentManual,
   paymentCardExpired,
+  PHOTO_CONSENT_DOMAINS,
+  getConsent,
+  hasRegisteredConsent,
 } from '../utils';
 
 type Props = {
@@ -39,84 +42,79 @@ const ConsentStatus = ({
   eventSemester: string,
 }) => {
   if (!useConsent) return null;
-  let isConsentingWeb;
-  let isConsentingSoMe;
 
-  if (photoConsents !== undefined) {
-    isConsentingWeb = photoConsents.find(
-      (consent) =>
-        consent.domain === 'WEBSITE' && consent.semester === eventSemester
+  const consentInfo = (className, consentDescription) => (
+    <div>
+      <i className={className} />
+      {consentDescription}
+    </div>
+  );
+
+  if (photoConsents && hasRegisteredConsent(photoConsents, eventSemester)) {
+    const { WEBSITE, SOCIAL_MEDIA } = PHOTO_CONSENT_DOMAINS;
+    const isConsentingWeb = getConsent(WEBSITE, eventSemester, photoConsents)
+      ?.isConsenting;
+    const isConsentingSoMe = getConsent(
+      SOCIAL_MEDIA,
+      eventSemester,
+      photoConsents
     )?.isConsenting;
 
-    isConsentingSoMe = photoConsents.find(
-      (consent) =>
-        consent.domain === 'SOCIAL_MEDIA' && consent.semester === eventSemester
-    )?.isConsenting;
-  }
-
-  if (
-    typeof isConsentingWeb === 'boolean' &&
-    typeof isConsentingWeb === 'boolean'
-  ) {
     if (isConsentingWeb && isConsentingSoMe) {
-      return (
-        <div>
-          <i className="fa fa-check-circle" /> Du samtykker til bilder på
-          Abakus.no og sosiale medier for semesteret {eventSemester}.
-        </div>
+      return consentInfo(
+        'fa fa-check-circle',
+        `Du samtykker til bilder på Abakus.no og sosiale medier for semesteret ${eventSemester}.`
       );
-    } else if (!isConsentingWeb && !isConsentingSoMe) {
-      return (
-        <div>
-          <i className="fa fa-times-circle" /> Du samtykker ikke til bilder for
-          semesteret {eventSemester}.
-        </div>
+    }
+
+    if (!isConsentingWeb && !isConsentingSoMe) {
+      return consentInfo(
+        'fa fa-times-circle',
+        `Du samtykker ikke til bilder for semesteret ${eventSemester}.`
       );
-    } else if (isConsentingWeb && !isConsentingSoMe) {
-      return (
-        <div>
-          <i className="fa fa-circle" /> Du samtykker kun til bilder på
-          Abakus.no for semesteret {eventSemester}.
-        </div>
+    }
+
+    if (isConsentingWeb && !isConsentingSoMe) {
+      return consentInfo(
+        'fa fa-circle',
+        `Du samtykker kun til bilder på
+          Abakus.no for semesteret ${eventSemester}.`
       );
-    } else if (!isConsentingWeb && isConsentingSoMe) {
-      return (
-        <div>
-          <i className="fa fa-facebook-square" /> Du samtykker kun til bilder på
-          sosiale medier for semesteret {eventSemester}.
-        </div>
+    }
+
+    if (!isConsentingWeb && isConsentingSoMe) {
+      return consentInfo(
+        'fa fa-facebook-square',
+        `Du samtykker kun til bilder på
+          sosiale medier for semesteret ${eventSemester}.`
       );
     }
   }
 
   if (LEGACY_photoConsent === 'PHOTO_CONSENT') {
-    return (
-      <div>
-        <i className="fa fa-check-circle" /> Du samtykker til bilder fra dette
-        arrangementet.
-      </div>
-    );
-  } else if (LEGACY_photoConsent === 'PHOTO_NOT_CONSENT') {
-    return (
-      <div>
-        <i className="fa fa-times-circle" /> Du samtykker ikke til bilder fra
-        dette arrangementet.
-      </div>
-    );
-  } else if (LEGACY_photoConsent === 'UNKNOWN' && hasEnded) {
-    return (
-      <div>
-        <i className="fa fa-exclamation-circle" /> Du tok ikke stilling til
-        bildesamtykke på dette arrangementet.
-      </div>
+    return consentInfo(
+      'fa fa-check-circle',
+      'Du samtykker til bilder fra dette arrangementet.'
     );
   }
 
-  return (
-    <div>
-      <i className="fa fa-exclamation-circle" /> Dette arrangement krever
-      bildesamtykke.
-    </div>
+  if (LEGACY_photoConsent === 'PHOTO_NOT_CONSENT') {
+    return consentInfo(
+      'fa fa-times-circle',
+      'Du samtykker ikke til bilder fra dette arrangementet.'
+    );
+  }
+
+  if (LEGACY_photoConsent === 'UNKNOWN' && hasEnded) {
+    return consentInfo(
+      'fa fa-exclamation-circle',
+      'Du tok ikke stilling til bildesamtykke på dette arrangementet.'
+    );
+  }
+
+  return consentInfo(
+    'fa fa-exclamation-circle',
+    'Dette arrangement krever bildesamtykke.'
   );
 };
 const PresenceStatus = ({

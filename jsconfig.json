@@ -8,9 +8,5 @@
       "app/*": ["./app/*"]
     }
   },
-  "exclude": [
-    "node_modules",
-    "dist",
-    "dist-client"
-  ]
+  "exclude": ["node_modules", "dist", "dist-client"]
 }
